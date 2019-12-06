@@ -13,7 +13,7 @@ int main(int argc, char **argv)
 	int **arr = rand_2d_array(size);
 
 	printf("%s * %s array. %s threads.\n", argv[1], argv[1], argv[2]);
-	getchar();
+
 	int max;
 	double wtime;
 	#pragma omp parallel num_threads(2) private(max, wtime)
