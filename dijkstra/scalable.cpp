@@ -78,20 +78,45 @@ int dijkstra(int** cost, int size, int source, int target)
 
 	for(i = 0; i < size; i++) {
 		dist[i] = INT_MAX;
-	} dist[source] = 0, updater_of[source] = -1;
+	}
+
+	dist[source] = 0;
+	updater_of[source] = -1;
 	while(!graphed[target]) {
-		start = arg_min(dist, graphed, size);
-		graphed[start] = 1;
-		for (i = 0; i < size; i++) {
-			if(cost[start][i] && !graphed[i]) {
-				d = dist[start] + cost[start][i];
-				if (d < dist[i]) {
-					dist[i] = d;
-					updater_of[i] = start;
+
+		if(size > DO_PARALLEL) {
+			start = arg_min_parallel(dist, graphed, size);
+			graphed[start] = 1;
+
+			#pragma omp parallel for schedule(static, 53)
+			for (i = 0; i < size; i++) {
+				if(cost[start][i] && !graphed[i]) {
+					d = dist[start] + cost[start][i];
+					if (d < dist[i]) {
+						dist[i] = d;
+						updater_of[i] = start;
+					}
+				}
+			}
+
+		} else {
+			start = arg_min(dist, graphed, size);
+			graphed[start] = 1;
+
+			for (i = 0; i < size; i++) {
+				if(cost[start][i] && !graphed[i]) {
+					d = dist[start] + cost[start][i];
+					if (d < dist[i]) {
+						dist[i] = d;
+						updater_of[i] = start;
+					}
 				}
 			}
 		}
-	} if(path_true) {
+	}
+
+	if(path_true) {
+
 		int buffer[size];
 		register int buf_len = 0;
 		start = target;
@@ -102,8 +127,9 @@ int dijkstra(int** cost, int size, int source, int target)
 		_print_student_id();
 		for(i = buf_len - 1; i >= 0; i--) {
 			printf("n%04d ", buffer[i]);
-		} printf("\n");
-	} 
+		}
+		printf("\n");
+	}
 	return dist[target];
 }
 
@@ -117,8 +143,8 @@ int main(int argc, char* argv[])
 	int src = atoi(argv[4]);
 	int target = atoi(argv[5]);
 
-	int size = 0;
-	int **cost = csv_to_array(file_name, &size);
+	int size = _extract_str_int(file_name);
+	int **cost = random2DArray(size);
 	omp_set_num_threads(n_thread);
 
 	double time = omp_get_wtime();
