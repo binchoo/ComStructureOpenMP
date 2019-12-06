@@ -5,6 +5,7 @@
 #include <string.h>
 
 #define INT_MAX 10000000
+#define DO_PARALLEL 9999
 int   n_thread;
 int   path_true;
 /*Test Utils*/
@@ -52,6 +53,21 @@ int arg_min_parallel(int* dist, int* graphed, int size)
 	return arg_min;
 }
 
+int arg_min(int* dist, int* graphed, int size)
+{
+	register int i;
+	register int min = INT_MAX;
+	register int arg_min;
+	for(i = 0; i < size; i++) {
+		if(!graphed[i] && dist[i] < min) {
+			min = dist[i];
+			arg_min = i;
+		}
+	}
+	return arg_min;
+}
+
+
 /*Algorithm*/
 int dijkstra(int** cost, int size, int source, int target)
 {
@@ -68,16 +84,32 @@ int dijkstra(int** cost, int size, int source, int target)
 	updater_of[source] = -1;
 	while(!graphed[target]) {
 
-		start = arg_min_parallel(dist, graphed, size);
-		graphed[start] = 1;
-		
-	//	#pragma omp parallel for schedule(static, 53)
-		for (i = 0; i < size; i++) {
-			if(cost[start][i] && !graphed[i]) {
-				d = dist[start] + cost[start][i];
-				if (d < dist[i]) {
-					dist[i] = d;
-					updater_of[i] = start;
+		if(size > DO_PARALLEL) {
+			start = arg_min_parallel(dist, graphed, size);
+			graphed[start] = 1;
+
+			#pragma omp parallel for schedule(static, 53)
+			for (i = 0; i < size; i++) {
+				if(cost[start][i] && !graphed[i]) {
+					d = dist[start] + cost[start][i];
+					if (d < dist[i]) {
+						dist[i] = d;
+						updater_of[i] = start;
+					}
+				}
+			}
+
+		} else {
+			start = arg_min(dist, graphed, size);
+			graphed[start] = 1;
+
+			for (i = 0; i < size; i++) {
+				if(cost[start][i] && !graphed[i]) {
+					d = dist[start] + cost[start][i];
+					if (d < dist[i]) {
+						dist[i] = d;
+						updater_of[i] = start;
+					}
 				}
 			}
 		}
