@@ -31,7 +31,7 @@ int arg_min_parallel(int* dist, int* graphed, int size)
 		register int my_id = omp_get_thread_num();
 		register int local_min = INT_MAX;
 		local_arg_min[my_id] = -1;
-		#pragma omp for schedule(static, 53)
+		#pragma omp for schedule(static, 13)
 		for(i = 0; i < size; i++) {
 			if(!graphed[i] && dist[i] < local_min) {
 				local_min = dist[i];
@@ -88,7 +88,7 @@ int dijkstra(int** cost, int size, int source, int target)
 			start = arg_min_parallel(dist, graphed, size);
 			graphed[start] = 1;
 
-			#pragma omp parallel for schedule(static, 53)
+			#pragma omp parallel for schedule(static, 13)
 			for (i = 0; i < size; i++) {
 				if(cost[start][i] && !graphed[i]) {
 					d = dist[start] + cost[start][i];
