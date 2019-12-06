@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define INT_MAX 10000000
-#define DO_PARALLEL 9999
+#define DO_PARALLEL INT_MAX
 int   n_thread;
 int   path_true;
 /*Test Utils*/
