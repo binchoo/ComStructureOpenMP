@@ -1,345 +1,182 @@
+#include <iostream>
+#include <queue>
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 
+/*Config Variables*/
 #define INT_MAX 10000000
-int n_thread;
-/*Test Utils*/
+#define DO_PARALLEL 9999
+#define chunk_size 13
+int   n_thread;
+int   path_true;
+
+/*Print Utils*/
 void _print_student_id	();
-void  print_path	(char*);
-void  print_dist_time	(int, double);
+void  print_path	(int* updater_of, int target, int size);
+void  print_dist_time	(int dist, double time);
+
 /*CSV Reader*/
 int  _extract_str_int	(char* str);
 int **csv_to_array	(char* file_name, int* get_size);
 
-/*Testing Array Utils*/
-int **random2DArray	(int size);
-int **symetricArray	(int** arr, int size);
+/*Array Generation Utils*/
+int **random_2d_array	(int size);
+int **symmetric_2d_array(int** arr, int size);
 
-/*Algorithm*/
-int dijkstra(struct Graph* graph, int source, int target);
+using namespace std;
+/*Heap Node*/
+struct Node {
+	int id;
+	int dist;
+	Node(int id, int dist) : id(id), dist(dist) { }
+};
 
-// A structure to represent a node in adjacency list 
-struct AdjListNode 
-{ 
-    int dest; 
-    int weight; 
-    struct AdjListNode* next; 
-}; 
-  
-// A structure to represent an adjacency list 
-struct AdjList 
+/*Heap Comparator*/
+struct cmp {
+	bool operator()(Node& u, Node& v) {
+		return u.dist > v.dist;
+	}
+};
+
+/*Dijkstra Minimum Distance*/
+/*여러 번 호출되기 때문에 inline으로 선언*/
+inline int arg_min(int* dist, int* graphed, int size)
 {
-    int len; 
-    struct AdjListNode* head;  // pointer to head node of list 
-    struct AdjListNode** entry;
-}; 
-  
-// A structure to represent a graph. A graph is an array of adjacency lists. 
-// Size of array will be V (number of vertices in graph) 
-struct Graph 
-{ 
-    int V; 
-    struct AdjList* array; 
-}; 
-  
-// A utility function to create a new adjacency list node 
-struct AdjListNode* newAdjListNode(int dest, int weight) 
-{ 
-    struct AdjListNode* newNode = 
-            (struct AdjListNode*) malloc(sizeof(struct AdjListNode)); 
-    newNode->dest = dest; 
-    newNode->weight = weight; 
-    newNode->next = NULL; 
-    return newNode; 
-} 
-  
-// A utility function that creates a graph of V vertices 
-struct Graph* createGraph(int V) 
-{ 
-    struct Graph* graph = (struct Graph*) malloc(sizeof(struct Graph)); 
-    graph->V = V; 
-  
-    // Create an array of adjacency lists.  Size of array will be V 
-    graph->array = (struct AdjList*) malloc(V * sizeof(struct AdjList)); 
-  
-     // Initialize each adjacency list as empty by making head as NULL 
-    for (int i = 0; i < V; ++i) 
-    {
-        graph->array[i].entry = (struct AdjListNode**)malloc(V * sizeof(struct AdjList*));
-        graph->array[i].len = 0;
-        graph->array[i].head = NULL; 
-    }
-    return graph; 
-} 
-  
-// Adds an edge to an undirected graph 
-void addEdge(struct Graph* graph, int src, int dest, int weight) 
-{ 
-    // Add an edge from src to dest.  A new node is added to the adjacency 
-    // list of src.  The node is added at the beginning 
-    struct AdjListNode* newNode = newAdjListNode(dest, weight); 
-    newNode->next = graph->array[src].head; 
-    graph->array[src].head = newNode; 
-    graph->array[src].entry[graph->array[src].len++] = newNode;
-    // Since graph is undirected, add an edge from dest to src also 
-    newNode = newAdjListNode(src, weight); 
-    newNode->next = graph->array[dest].head; 
-    graph->array[dest].head = newNode; 
-    graph->array[dest].entry[graph->array[dest].len++] = newNode;
-} 
-  
-// Structure to represent a min heap node 
-struct MinHeapNode 
-{ 
-    int  v; 
-    int dist; 
-}; 
-  
-// Structure to represent a min heap 
-struct MinHeap 
-{ 
-    int size;      // Number of heap nodes present currently 
-    int capacity;  // Capacity of min heap 
-    int *pos;     // This is needed for decreaseKey() 
-    struct MinHeapNode **array; 
-}; 
-  
-// A utility function to create a new Min Heap Node 
-struct MinHeapNode* newMinHeapNode(int v, int dist) 
-{ 
-    struct MinHeapNode* minHeapNode = 
-           (struct MinHeapNode*) malloc(sizeof(struct MinHeapNode)); 
-    minHeapNode->v = v; 
-    minHeapNode->dist = dist; 
-    return minHeapNode; 
-} 
-  
-// A utility function to create a Min Heap 
-struct MinHeap* createMinHeap(int capacity) 
-{ 
-    struct MinHeap* minHeap = 
-         (struct MinHeap*) malloc(sizeof(struct MinHeap)); 
-    minHeap->pos = (int *)malloc(capacity * sizeof(int)); 
-    minHeap->size = 0; 
-    minHeap->capacity = capacity; 
-    minHeap->array = 
-         (struct MinHeapNode**) malloc(capacity * sizeof(struct MinHeapNode*)); 
-    return minHeap; 
-} 
-  
-// A utility function to swap two nodes of min heap. Needed for min heapify 
-void swapMinHeapNode(struct MinHeapNode** a, struct MinHeapNode** b) 
-{ 
-    struct MinHeapNode* t = *a; 
-    *a = *b; 
-    *b = t; 
-} 
-  
-// A standard function to heapify at given idx 
-// This function also updates position of nodes when they are swapped. 
-// Position is needed for decreaseKey() 
-void minHeapify(struct MinHeap* minHeap, int idx) 
-{ 
-    int smallest, left, right; 
-    smallest = idx; 
-    left = 2 * idx + 1; 
-    right = 2 * idx + 2; 
-  
-    if (left < minHeap->size && 
-        minHeap->array[left]->dist < minHeap->array[smallest]->dist ) 
-      smallest = left; 
-  
-    if (right < minHeap->size && 
-        minHeap->array[right]->dist < minHeap->array[smallest]->dist ) 
-      smallest = right; 
-  
-    if (smallest != idx) 
-    { 
-        // The nodes to be swapped in min heap 
-        MinHeapNode *smallestNode = minHeap->array[smallest]; 
-        MinHeapNode *idxNode = minHeap->array[idx]; 
-  
-        // Swap positions 
-        minHeap->pos[smallestNode->v] = idx; 
-        minHeap->pos[idxNode->v] = smallest; 
-  
-        // Swap nodes 
-        swapMinHeapNode(&minHeap->array[smallest], &minHeap->array[idx]); 
-  
-        minHeapify(minHeap, smallest); 
-    } 
-} 
-  
-// A utility function to check if the given minHeap is ampty or not 
-int isEmpty(struct MinHeap* minHeap) 
-{ 
-    return minHeap->size == 0; 
-} 
-  
-// Standard function to extract minimum node from heap 
-struct MinHeapNode* popMin(struct MinHeap* minHeap) 
-{ 
-    if (isEmpty(minHeap)) 
-        return NULL; 
-  
-    // Store the root node 
-    struct MinHeapNode* root = minHeap->array[0]; 
-  
-    // Replace root node with last node 
-    struct MinHeapNode* lastNode = minHeap->array[minHeap->size - 1]; 
-    minHeap->array[0] = lastNode; 
-  
-    // Update position of last node 
-    minHeap->pos[root->v] = minHeap->size-1; 
-    minHeap->pos[lastNode->v] = 0; 
-  
-    // Reduce heap size and heapify root 
-    --minHeap->size; 
-    minHeapify(minHeap, 0); 
-  
-    return root; 
-} 
-  
-// Function to decreasy dist value of a given vertex v. This function 
-// uses pos[] of min heap to get the current index of node in min heap 
-void decreaseKey(struct MinHeap* minHeap, int v, int dist) 
-{ 
-    // Get the index of v in  heap array 
-    int i = minHeap->pos[v]; 
-  
-    // Get the node and update its dist value 
-    minHeap->array[i]->dist = dist; 
-  
-    // Travel up while the complete tree is not hepified. 
-    // This is a O(Logn) loop 
-    while (i && minHeap->array[i]->dist < minHeap->array[(i - 1) / 2]->dist) 
-    { 
-        // Swap this node with its parent 
-        minHeap->pos[minHeap->array[i]->v] = (i-1)/2; 
-        minHeap->pos[minHeap->array[(i-1)/2]->v] = i; 
-        swapMinHeapNode(&minHeap->array[i],  &minHeap->array[(i - 1) / 2]); 
-  
-        // move to parent index 
-        i = (i - 1) / 2; 
-    } 
-} 
-  
-// A utility function to check if a given vertex 
-// 'v' is in min heap or not 
-bool isInMinHeap(struct MinHeap *minHeap, int v) 
-{ 
-   if (minHeap->pos[v] < minHeap->size) 
-     return true; 
-   return false; 
-} 
-  
-// A utility function used to print the solution 
-void printArr(int dist[], int n) 
-{ 
-    printf("Vertex   Distance from Source\n"); 
-    for (int i = 0; i < n; ++i) 
-        printf("%d \t\t %d\n", i, dist[i]); 
-} 
-
-void printConnections(Graph* graph)
-{
-    int v = graph->V;
-    int i = 0;
-    while(i < v)
-    {
-    	printf("vertex %d has %d neighbors.\n", i, graph->array[i].len);
-	i++;
-    }
-}
-  
-// The main function that calulates distances of shortest paths from src to all 
-// vertices. It is a O(ELogV) function 
-int dijkstra(struct Graph* graph, int src, int target) 
-{ 
-    int V = graph->V;// Get the number of vertices in graph 
-    int* dist = (int*)malloc(sizeof(int)*V);
-    struct MinHeap* minHeap = createMinHeap(V); 
-  
-    #pragma omp parallel for
-    for (int v = 0; v < V; ++v) 
-    { 
-        dist[v] = INT_MAX; 
-        minHeap->array[v] = newMinHeapNode(v, dist[v]); 
-        minHeap->pos[v] = v; 
-    } 
-  
-    minHeap->array[src] = newMinHeapNode(src, dist[src]); 
-    minHeap->pos[src]   = src; 
-    dist[src] = 0; 
-    decreaseKey(minHeap, src, dist[src]); 
-  
-    minHeap->size = V; 
-    double wtime = omp_get_wtime();
-    while (!isEmpty(minHeap)) 
-    { 
-        struct MinHeapNode* minHeapNode = popMin(minHeap); 
-        int u = minHeapNode->v; // Store the extracted vertex number 
-	//printf(" n%04d ", u);
-	if(u == target)
-		break;
-	#pragma omp parallel for
-	for(int i = 0; i < graph->array[u].len; i++)
-        { 
-            struct AdjListNode* pCrawl = graph->array[u].entry[i];
-	    int v = pCrawl->dest; 
-  
-            if (isInMinHeap(minHeap, v) && dist[u] != INT_MAX &&  
-                                          pCrawl->weight + dist[u] < dist[v]) 
-            { 
-            	dist[v] = dist[u] + pCrawl->weight; 
-            	#pragma omp critical
-            	{
-                	decreaseKey(minHeap, v, dist[v]);	
-            	}
-	    } 
-        } 
-    } 
-    return dist[target];
+	register int i;
+	register int min = INT_MAX;
+	register int arg_min;
+	for(i = 0; i < size; i++) {
+		if(!graphed[i] && dist[i] < min) {
+			min = dist[i];
+			arg_min = i;
+		}
+	} return arg_min;
 }
 
-struct Graph* arrayToGraph(int** weight, int size);
-  
+inline int arg_min_parallel(int* dist, int* graphed, int size)
+{
+	static int* local_arg_min = (int*)malloc(sizeof(int) * n_thread);
+	register int glob_min = INT_MAX, glob_arg_min;
+	register int my_arg;
+	register int i;
+	
+	#pragma omp parallel
+	{
+		register int my_id = omp_get_thread_num();
+		register int local_min = INT_MAX;
+		local_arg_min[my_id] = -1;
+		#pragma omp for schedule(static, chunk_size)
+		for (i = 0; i < size; i++) {
+			if (!graphed[i] && dist[i] < local_min) {
+				local_min = dist[i];
+				local_arg_min[my_id] = i;
+			}
+		}
+	} for (i = 0; i < n_thread; i++) {
+		my_arg = local_arg_min[i];
+		if (my_arg != -1 && dist[my_arg] < glob_min) {
+			glob_min = dist[my_arg];
+			glob_arg_min = my_arg;
+		}
+	} return glob_arg_min;
+}
+
+/*Dijkstra 알고리즘*/
+int dijkstra(int** cost, int size, int source, int target)
+{
+	int dist[size], updater_of[size]; //거리, 갱신자
+	int graphed[size] = { 0 }; //그래프 포함여부
+	register int i, start, d; //반복문 탐색자, 방금 그래프에 포함된 노드, 새로운 거리
+
+	/*초기화 단계*/
+	for(i = 0; i < size; i++) { 
+		dist[i] = INT_MAX;
+	} dist[source] = 0, updater_of[source] = -1; 
+
+	if (size > DO_PARALLEL) { // 역치를 넘겼을 경우에 병렬처리
+		while (!graphed[target]) {
+			start = arg_min_parallel(dist, graphed, size);
+			graphed[start] = 1;
+			#pragma omp parallel for schedule(static, chunk_size)
+			for (i = 0; i < size; i++) {
+				if (cost[start][i] && !graphed[i]) {
+					d = dist[start] + cost[start][i];
+					if (d < dist[i]) {
+						dist[i] = d;
+						updater_of[i] = start;
+					}
+				}
+			}	
+		}
+	} else { // 노드 수가 적으면 직렬처리.
+		priority_queue<Node, vector<Node>, cmp> dist_q; 
+		dist_q.push(Node(source, 0));
+		while (!graphed[target]) {
+			start = dist_q.top().id;
+			dist_q.pop();
+			graphed[start] = 1;
+			for (i = 0; i < size; i++) {
+				if (cost[start][i] && !graphed[i]) {
+					d = dist[start] + cost[start][i];
+					if (d < dist[i]) {
+						dist_q.push(Node(i, d)); // 이 부분이 임계영역이라 병렬처리 하면 병목이 됨.
+						dist[i] = d;
+						updater_of[i] = start;
+					}
+				}
+			}
+		}
+	} if (path_true) {
+		print_path(updater_of, target, size);
+	} return dist[target];
+}
+
 /*main*/
-//./serial mapDist1600.csv 4 0 200 1300
+//mapDist1600.csv 4 0 200 1300
 int main(int argc, char* argv[])
 {
-	char *file_name = argv[1];
+	char* file_name = argv[1];
 	n_thread = atoi(argv[2]);
-	int path_true = atoi(argv[3]);
+	path_true = atoi(argv[3]);
 	int src = atoi(argv[4]);
 	int target = atoi(argv[5]);
+	
+	int size = 0; //그래프 노드의 수
+	int **cost = csv_to_array(file_name, &size); //가중치 행렬 얻기
+	omp_set_num_threads(n_thread); //스레드 수 설정
 
-	int size = 0;
-	int **cost = csv_to_array(file_name, &size);
-	struct Graph* graph = arrayToGraph(cost, size);
-	omp_set_num_threads(n_thread);
-
-	double time = omp_get_wtime();
-	int dist = dijkstra(graph, src, target);
+	double time = omp_get_wtime(); 
+	int dist = dijkstra(cost, size, src, target);
 	time = omp_get_wtime() - time;
 
-	print_dist_time(dist, time);
+	print_dist_time(dist, time); //거리와 실행시간 출력
 	free(cost);
 	return 0;
 }
-/*Test Utils*/
+
+/*Print Utils Impl.*/
 void _print_student_id()
 {
 	printf("201511298 ");
 }
 
-void print_path(char* path)
+void print_path(int* updater_of, int target, int size)
 {
+	int buffer[size];
+	register int buf_len = 0;
+
+	do {
+		buffer[buf_len++] = target;
+	} while ((target = updater_of[target]) != -1);
+
 	_print_student_id();
-	printf("%s\n", path);	
+
+	for(register int i = buf_len - 1; i >= 0; i--) {
+		printf("n%04d ", buffer[i]);
+	} printf("\n");
 }
 
 void print_dist_time(int dist, double wtime)
@@ -352,103 +189,83 @@ void print_dist_time(int dist, double wtime)
 int _extract_str_int(char* str)
 {
 	int i = 0, start = 0, end = strlen(str) - 1;
-	char* copy, c;
+	char c;
 
-	while((c = str[i])!='\0')
-	{
-		if(isdigit(c) && start == 0)
+	while((c = str[i]) != '\0') {
+		if(isdigit(c) && start == 0) {
 			start = i;
-		if(c == '.')
+		} if(c == '.') {
 			end = i;
-		i++;
+		} i++;
 	}
 	
 	int store = str[end];
 	str[end] = '\0';
-	copy = str + start;
-
-	int rtn = atoi(copy);
+	str = str + start;
+	
+	int rtn = atoi(str);
+	str = str - start;
 	str[end] = store;
 	return rtn;
 }
 
-int** csv_to_array(char* file_name, int* get_size)
+int **csv_to_array(char* file_name, int* get_size)
 {
 	FILE* csv = fopen(file_name, "r");
 	int size = _extract_str_int(file_name);
 	int** data = (int**)malloc(size*sizeof(int*));
     
-	if(!csv) {
+	if (!csv) {
 		printf("%s is not a file.\n", file_name);    
 		exit(-1);
-	}
-    
-	for(int i = 0; i < size; i++)
+	} for (int i = 0; i < size; i++) {
 		data[i] = (int*)malloc(size*sizeof(int));
-    
+    	}
+
 	char* row = (char*)malloc(size*10);
 	int r = 0, c;
-	while(fgets(row, size*10, csv))
-	{
-		if(r != 0)
-		{
-			char* col = strtok(row, ",\n");
+	while (fgets(row, size*10, csv)) {
+		if (r != 0) {
 			c = 0;
-			while(col != NULL)
-			{
-				if(c != 0)
-				{
-					if(strcmp(col, "MAX") == 0)
-						data[r-1][c-1] = INT_MAX;
-					else
+			char* col = strtok(row, ",\n");
+			while (col != NULL) {
+				if(c != 0) {
+					if(strcmp(col, "MAX") == 0) {
+						data[r-1][c-1] = 0;
+					} else {
 						data[r-1][c-1] = atoi(col);
-				}
-				col = strtok(NULL, ",\n");
-				c++;
+					}
+				} c++, col = strtok(NULL, ",\n");
 			}
-		}
-		r++;
-	}
+		} r++;
+	} 
+	fclose(csv);
     	*get_size = size;
 	return data;
 }
 
-/*Testing Array Utils Impl.*/
-int **random2DArray(int size)
+/*Array Generation Utils Impl.*/
+int **random_2d_array(int size)
 {
 	int** array = (int**)malloc(size*sizeof(int*));
 	#pragma omp parallel for
-	for(int i = 0; i < size; i++)
-	{
+	for (int i = 0; i < size; i++) {
 		array[i] = (int*)malloc(size*sizeof(int));
-		for(int j = 0; j < size; j++)
-		{
-			if(i == j)
+		for (int j = 0; j < size; j++) {
+			if(i == j) {
 				array[i][j] = 0;
-			else
+			} else {
 				array[i][j] = i + size - j;
+			}
 		}
-	}
-	return array;
+	} return array;
 }
 
-int **symetricArray	(int** arr, int size)
+int **symmetric_2d_array(int** arr, int size)
 {
 	for(int i = 0; i < size; i++) {
 		for(int j = i; j < size; j++) {
 			arr[j][i] = arr[i][j];
 		}
-	}
-	return arr;
-}
-
-/*Graph Generator Impl.*/
-struct Graph* arrayToGraph(int** weight, int size)
-{
-	struct Graph* graph = createGraph(size);
-	for(int i = 0; i < size - 1; i++)
-		for(int j = i + 1; j < size; j++) 
-			if(weight[i][j] != 0)
-				addEdge(graph, i, j, weight[i][j]);
-	return graph;
+	} return arr;
 }

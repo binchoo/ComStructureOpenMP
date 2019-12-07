@@ -146,12 +146,19 @@ int main(int argc, char* argv[])
 	int size = 0;
 	int **cost = csv_to_array(file_name, &size);
 	omp_set_num_threads(n_thread);
-
-	double time = omp_get_wtime();
-	int dist = dijkstra(cost, size, src, target);
-	time = omp_get_wtime() - time;
-
-	print_dist_time(dist, time);
+	double total_time = 0;
+	int total = 0;
+	for(int i = 0; i < size; i++) {
+		for(int j = i + 1; j < size; j++) {
+			double time = omp_get_wtime();
+			int dist = dijkstra(cost, size, src, i);
+			time = omp_get_wtime() - time;
+//			print_dist_time(dist, time);
+			total_time += time;
+			total++;
+		}
+		printf("average time = %lf\n", total_time/total);
+	}
 	free(cost);
 	return 0;
 }
@@ -266,4 +273,3 @@ int **symetricArray	(int** arr, int size)
 	}
 	return arr;
 }
-
