@@ -8,7 +8,7 @@
 
 /*Config Variables*/
 #define INT_MAX 10000000
-#define DO_PARALLEL 9999
+#define DO_PARALLEL 14999
 #define chunk_size 13
 int   n_thread;
 int   path_true;
@@ -91,7 +91,6 @@ int dijkstra(int** cost, int size, int source, int target)
 	int graphed[size] = { 0 }; //그래프 포함여부
 	register int i, start, d; //반복문 탐색자, 방금 그래프에 포함된 노드, 새로운 거리
 
-	/*초기화 단계*/
 	for(i = 0; i < size; i++) { 
 		dist[i] = INT_MAX;
 	} dist[source] = 0, updater_of[source] = -1; 

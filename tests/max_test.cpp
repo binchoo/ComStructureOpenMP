@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+int **rand_1d_array	(int size);
 int **rand_2d_array	(int size);
 int get_max		(int** arr, int size);
 int get_max_parallel	(int** arr, int size, int n_thread);
@@ -33,6 +34,12 @@ int main(int argc, char **argv)
 	}
 	free(arr);
 	return 0;
+}
+int **rand_1d_array(int size)
+{
+	int* rtn = (int*)malloc(sizeof(int)*size);
+	for(int i = 0; i < size; i++)
+		rtn[i] = 1000 - i / 2 + i*i;
 }
 
 int **rand_2d_array(int size)

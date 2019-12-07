@@ -44,7 +44,7 @@ int assign(int* arr, int size)
 int assign_parallel(int* arr, int size, int n_thread)
 {
 	omp_set_num_threads(n_thread);
-	#pragma omp parallel for
+	#pragma omp parallel for schedule(static, 1)
 	for(int i = 0; i < size; i++)
 		arr[i] = 1024;
 	return 1;
