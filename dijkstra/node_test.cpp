@@ -134,6 +134,98 @@ int dijkstra(int** cost, int size, int source, int target)
 	} return dist[target];
 }
 
+int compact_bi_dijkstra(int** cost, int size, int source, int target)
+{
+	int f_dist[size], f_updater_of[size]; //거리, 갱신자
+	int b_dist[size], b_updater_of[size]; //거리, 갱신자
+	int f_graphed[size] = { 0 }; //그래프 포함여부
+	int b_graphed[size] = { 0 }; //그래프 포함여부
+	register int i, f_start, b_start, d; //반복문 탐색자, 방금 그래프에 포함된 노드, 새로운 거리
+	for(i = 0; i < size; i++) { 
+		f_dist[i] = INT_MAX;
+		b_dist[i] = INT_MAX;
+	} 
+	f_dist[source] = 0, f_updater_of[source] = -1; 
+	b_dist[target] = 0, b_updater_of[target] = -1; 
+
+	priority_queue<Node, vector<Node>, cmp> f_dist_q; 
+	f_dist_q.push(Node(source, 0));
+	priority_queue<Node, vector<Node>, cmp> b_dist_q; 
+	b_dist_q.push(Node(target, 0));
+	int x;
+	while(1) {
+		#pragma omp parallel sections private(i, d)
+		{
+		#pragma omp section
+		{
+			f_start = f_dist_q.top().id;
+			f_graphed[f_start] = 1; 
+			f_dist_q.pop();
+			for (i = 0; i < size; i++) {
+				if (cost[f_start][i] && !f_graphed[i]) {
+					d = f_dist[f_start] + cost[f_start][i];
+					if (d < f_dist[i]) {
+						f_dist_q.push(Node(i, d));
+						f_dist[i] = d;
+						f_updater_of[i] = f_start;
+					}
+				}
+			}
+		
+		}
+		#pragma omp section
+		{
+			b_start = b_dist_q.top().id;
+			b_graphed[b_start] = 1; 
+			b_dist_q.pop();
+			for (i = 0; i < size; i++) {
+				if (cost[b_start][i] && !b_graphed[i]) {
+					d = b_dist[b_start] + cost[b_start][i];
+					if (d < b_dist[i]) {
+						b_dist_q.push(Node(i, d)); 
+						b_dist[i] = d;
+						b_updater_of[i] = b_start;
+					}
+				}
+			}
+		}//end section
+		}//end sections
+		if (b_graphed[f_start]) {
+			x = f_start;
+			break;
+		} else if (f_graphed[b_start]) {
+			x = b_start;
+			break;
+		}
+	}
+       	printf("middle vertex is %d!\n", x);
+	return f_dist[x] + b_dist[x];
+
+}
+
+int bi_dijkstra(int** cost, int size, int source, int target)
+{
+	register int test, shortest = INT_MAX;
+	register int x, f_dist, b_dist;
+	int min_x;
+	for (x = 0; x < size; x++) {
+		#pragma omp parallel sections
+		{
+			#pragma omp section
+			f_dist = dijkstra(cost, size, source, x);
+			#pragma omp section
+			b_dist = dijkstra(cost, size, target, x);
+
+		} if ((test = f_dist + b_dist) < shortest) {
+			shortest = test;
+			min_x = x;
+		}
+	}
+	printf("middle vertex is %d!\n", min_x);
+	return shortest;
+}
+
+
 /*main*/
 //mapDist1600.csv 4 0 200 1300
 int main(int argc, char* argv[])
@@ -154,7 +246,7 @@ int main(int argc, char* argv[])
 	for(int i = 7; i < 15; i++) {
 		for(int j = i + 1; j < i + 1000; j++) {
 			time = omp_get_wtime(); 
-			dist = dijkstra(cost, size, i, j);
+			dist = compact_bi_dijkstra(cost, size, i, j);
 			time = omp_get_wtime() - time;
 			total_time += time;
 			count++;
