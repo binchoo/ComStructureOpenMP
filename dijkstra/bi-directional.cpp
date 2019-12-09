@@ -8,6 +8,7 @@
 
 /*Config Variables*/
 #define INT_MAX 10000000
+#define DO_PARALLEL 9999
 #define chunk_size 13
 int   n_thread;
 int   path_true;
@@ -20,17 +21,16 @@ inline
 void _print_student_id	(FILE* fp);
 
 inline
-void  print_path	(FILE* fp, int* updater_of, int target, int size);
+void  print_path	(FILE* fp, int* updater_of, int target, int size); //src -> target
 
 inline
-void  print_path_reverse(FILE* fp, int* updater_of, int target, int size);
+void  print_path_reverse(FILE* fp, int* updater_of, int target, int size); //target -> src
 
-inline
 void  print_dist_time	(FILE* fp, int dist, double time);
 
 /*CSV Reader*/
-int  _extract_str_int	(char* str);
-int **csv_to_array	(char* file_name, int* get_size);
+int  _extract_str_int	(char* str); //str에서 숫자를 추출
+int **csv_to_array	(char* file_name, int* get_size); //csv에서 행렬을 불러옴
 
 /*Array Generation Utils*/
 int **random_2d_array	(int size);
@@ -51,8 +51,20 @@ struct cmp {
 	}
 };
 
-/*Dijkstra 알고리즘*/
-int dijkstra(int** cost, int size, int source, int target)
+inline int arg_min(int* dist, int* graphed, int size)
+{
+	register int i;
+	register int min = INT_MAX;
+	register int arg_min;
+	for(i = 0; i < size; i++) {
+		if(!graphed[i] && dist[i] < min) {
+			min = dist[i];
+			arg_min = i;
+		}
+	} return arg_min;
+}
+
+int single_dijkstra(int** cost, int size, int source, int target)
 {
 	int dist[size], updater_of[size]; //거리, 갱신자
 	int graphed[size] = { 0 }; //그래프 포함여부
@@ -60,11 +72,11 @@ int dijkstra(int** cost, int size, int source, int target)
 
 	for(i = 0; i < size; i++) { 
 		dist[i] = INT_MAX;
-	} 
-	dist[source] = 0, updater_of[source] = -1; 
+	} dist[source] = 0, updater_of[source] = -1; 
 
-	priority_queue<Node, vector<Node>, cmp> dist_q; //dist min heap
+	priority_queue<Node, vector<Node>, cmp> dist_q; 
 	dist_q.push(Node(source, 0));
+
 	while (!graphed[target]) {
 		start = dist_q.top().id;
 		dist_q.pop();
@@ -84,7 +96,7 @@ int dijkstra(int** cost, int size, int source, int target)
 	} return dist[target];
 }
 
-int compact_bi_dijkstra(int** cost, int size, int source, int target)
+int bidirect_dijkstra(int** cost, int size, int source, int target)
 {
 	int f_dist[size], f_updater_of[size], f_graphed[size] = {0}; //거리, 갱신자
 	int b_dist[size], b_updater_of[size], b_graphed[size] = {0}; //거리, 갱신자
@@ -158,6 +170,14 @@ int compact_bi_dijkstra(int** cost, int size, int source, int target)
 	} return f_dist[x] + b_dist[x];
 }
 
+int dijkstra(int** cost, int size, int source, int target)
+{
+	if(size > DO_PARALLEL)
+		return bidirect_dijkstra(cost, size, source, target);
+	else
+		return single_dijkstra(cost, size, source, target);
+}
+
 /*main*/
 int main(int argc, char* argv[])
 {
@@ -179,7 +199,7 @@ int main(int argc, char* argv[])
 
 	/*Find Shortest Path*/	
 	double time = omp_get_wtime(); 
-	int dist = compact_bi_dijkstra(cost, size, src, target);
+	int dist = dijkstra(cost, size, src, target);
 	time = omp_get_wtime() - time;
 
 	/*Print Out Computation Time*/
@@ -237,7 +257,6 @@ void print_path_reverse(FILE* fp, int* updater_of, int target, int size)
 	fprintf(fp, "\n");
 }
 
-inline
 void print_dist_time(FILE* fp, int dist, double wtime)
 {
 	_print_student_id(fp);
