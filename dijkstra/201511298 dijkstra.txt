@@ -1,0 +1,4 @@
+param: mapDist10000.csv 4 1 200 300
+201511298 Shortest Path: 4 Compute time: 12.22025 msec
+param: mapDist1600.csv 4 1 200 300
+201511298 Shortest Path: 284 Compute time: 0.84720 msec

@@ -12,11 +12,13 @@
 #define chunk_size 13
 int   n_thread;
 int   path_true;
+FILE  *fout;
 
 /*Print Utils*/
-void _print_student_id	();
-void  print_path	(int* updater_of, int target, int size);
-void  print_dist_time	(int dist, double time);
+void  print_param	(FILE* fp, char** argv);
+void _print_student_id	(FILE* fp);
+void  print_path	(FILE* fp, int* updater_of, int target, int size);
+void  print_dist_time	(FILE* fp, int dist, double time);
 
 /*CSV Reader*/
 int  _extract_str_int	(char* str);
@@ -43,7 +45,8 @@ struct cmp {
 
 /*Dijkstra Minimum Distance*/
 /*여러 번 호출되기 때문에 inline으로 선언*/
-inline int arg_min(int* dist, int* graphed, int size)
+inline 
+int arg_min(int* dist, int* graphed, int size)
 {
 	register int i;
 	register int min = INT_MAX;
@@ -56,7 +59,8 @@ inline int arg_min(int* dist, int* graphed, int size)
 	} return arg_min;
 }
 
-inline int arg_min_parallel(int* dist, int* graphed, int size)
+inline 
+int arg_min_parallel(int* dist, int* graphed, int size)
 {
 	static int* local_arg_min = (int*)malloc(sizeof(int) * n_thread);
 	register int glob_min = INT_MAX, glob_arg_min;
@@ -85,7 +89,8 @@ inline int arg_min_parallel(int* dist, int* graphed, int size)
 }
 
 /*Dijkstra 알고리즘*/
-inline int dijkstra(int** cost, int size, int source, int target)
+inline 
+int dijkstra(int** cost, int size, int source, int target)
 {
 	int dist[size], updater_of[size]; //거리, 갱신자
 	int graphed[size] = { 0 }; //그래프 포함여부
@@ -113,7 +118,7 @@ inline int dijkstra(int** cost, int size, int source, int target)
 			}
 		}
 	} if (path_true) {
-		print_path(updater_of, target, size);
+		print_path(fout, updater_of, target, size);
 	} return dist[target];
 }
 
@@ -159,7 +164,7 @@ int compact_bi_dijkstra(int** cost, int size, int source, int target)
 		#pragma omp section
 		{
 			b_start = b_dist_q.top().id;
-			b_graphed[b_start] = 1; 
+			b_graphed[b_start] = 1;
 			b_dist_q.pop();
 			for (i = 0; i < size; i++) {
 				if (cost[b_start][i] && !b_graphed[i]) {
@@ -181,7 +186,6 @@ int compact_bi_dijkstra(int** cost, int size, int source, int target)
 			break;
 		}
 	}
-       	printf("middle vertex is %d!\n", x);
 	return f_dist[x] + b_dist[x];
 
 }
@@ -212,6 +216,7 @@ int bi_dijkstra(int** cost, int size, int source, int target)
 //mapDist1600.csv 4 0 200 1300
 int main(int argc, char* argv[])
 {
+	fout = fopen("201511298 dijkstra.txt", "a");
 	char* file_name = argv[1];
 	n_thread = atoi(argv[2]);
 	path_true = atoi(argv[3]);
@@ -220,24 +225,35 @@ int main(int argc, char* argv[])
 	
 	int size = 0; //그래프 노드의 수
 	int **cost = csv_to_array(file_name, &size); //가중치 행렬 얻기
-	omp_set_num_threads(n_thread); //스레드 수 설정
 
+	omp_set_num_threads(n_thread); //스레드 수 설정
+	
+	print_param(fout, argv); //param 출력
 	double time = omp_get_wtime(); 
 	int dist = compact_bi_dijkstra(cost, size, src, target);
 	time = omp_get_wtime() - time;
 
-	print_dist_time(dist, time); //거리와 실행시간 출력
+	print_dist_time(fout, dist, time); //거리와 실행시간 출력
 	free(cost);
+	fclose(fout);
 	return 0;
 }
 
 /*Print Utils Impl.*/
-void _print_student_id()
+void print_param(FILE* fp, char** argv)
 {
-	printf("201511298 ");
+	printf("param: %s %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4], argv[5]);
+	fprintf(fp, "param: %s %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4], argv[5]);
 }
 
-void print_path(int* updater_of, int target, int size)
+void _print_student_id(FILE* fp)
+{
+	printf("201511298 ");
+	fprintf(fp, "201511298 ");
+}
+
+
+void print_path(FILE* fp, int* updater_of, int target, int size)
 {
 	int buffer[size];
 	register int buf_len = 0;
@@ -246,17 +262,22 @@ void print_path(int* updater_of, int target, int size)
 		buffer[buf_len++] = target;
 	} while ((target = updater_of[target]) != -1);
 
-	_print_student_id();
+	_print_student_id(fp);
 
 	for(register int i = buf_len - 1; i >= 0; i--) {
 		printf("n%04d ", buffer[i]);
-	} printf("\n");
+		fprintf(fp, "n%04d ", buffer[i]);
+	} 
+	printf("\n");
+	fprintf(fp, "\n");
 }
 
-void print_dist_time(int dist, double wtime)
+
+void print_dist_time(FILE* fp, int dist, double wtime)
 {
-	_print_student_id();
-	printf("Shortest Path: %d Compute time: %lf msec\n", dist, wtime);
+	_print_student_id(fp);
+	printf("Shortest Path: %d Compute time: %.5lf msec\n", dist, wtime * 1000);
+	fprintf(fp, "Shortest Path: %d Compute time: %.5lf msec\n", dist, wtime * 1000);
 }
 
 /*CSV Reader Impl.*/
