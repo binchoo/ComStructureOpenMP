@@ -7,11 +7,10 @@
 
 /*Config Variables*/
 #define INT_MAX 10000000
-#define DO_PARALLEL 4000
+#define DO_PARALLEL 5000
 int   N_THREAD;
 int   PATH_TRUE;
 FILE  *F_OUT;
-
 /*Print Utils*/
 void  print_param	(char** argv);
 void _print_student_id	();
@@ -44,7 +43,7 @@ struct cmp {
 
 int uni_dijkstra(int** cost, int size, int source, int target)
 {
-	int dist[size], updater_of[size], graphed[size]; //거리, 갱신자, 그래프 포함여부
+	int dist[size], updater_of[size], graphed[size] = {0}; //거리, 갱신자, 그래프 포함여부
 	register int i, start, d; //탐색자, 그래프에 편입된 노드, 새로운 거리
 
 	for(i = 0; i < size; i++) { 
@@ -68,7 +67,8 @@ int uni_dijkstra(int** cost, int size, int source, int target)
 				}
 			}
 		}
-	} if (PATH_TRUE) {
+	}
+	if (PATH_TRUE) {
 		print_path(updater_of, target, size);
 	} return dist[target];
 }
@@ -88,11 +88,11 @@ int bidirect_dijkstra(int** cost, int size, int source, int target)
 
 	priority_queue<Node, vector<Node>, cmp> f_dist_q; 
 	f_dist_q.push(Node(source, 0));
-	f_dist[source] = 0; 
+	f_dist[source]= 0; 
 
 	priority_queue<Node, vector<Node>, cmp> b_dist_q; 
 	b_dist_q.push(Node(target, 0));
-	b_dist[target] = 0; 
+	b_dist[target]= 0; 
 
 	while(1) {
 		#pragma omp parallel sections private(i, d)
@@ -107,7 +107,7 @@ int bidirect_dijkstra(int** cost, int size, int source, int target)
 					d = f_dist[f_start] + cost[f_start][i];
 					if (d < f_dist[i]) {
 						f_dist_q.push(Node(i, d));
-						f_dist[i] = d;
+						f_dist[i]= d;
 						f_updater_of[i] = f_start;
 					}
 				}
@@ -121,30 +121,36 @@ int bidirect_dijkstra(int** cost, int size, int source, int target)
 			b_dist_q.pop();
 			for (i = 0; i < size; i++) {
 				if (cost[b_start][i] && !b_graphed[i]) {
-					d = b_dist[b_start] + cost[b_start][i];
+					d = b_dist[b_start]+ cost[b_start][i];
 					if (d < b_dist[i]) {
 						b_dist_q.push(Node(i, d)); 
-						b_dist[i] = d;
+						b_dist[i]= d;
 						b_updater_of[i] = b_start;
 					}
 				}
 			}
 		}//end section
 		}//end sections
-		if (b_graphed[f_start]) {
-			x = f_start;
-			break;
-		} else if (f_graphed[b_start]) {
-			x =  b_start;
+		if (b_graphed[f_start] || f_graphed[b_start]) {
 			break;
 		}
-	} if (PATH_TRUE) {
+	} 
+	//최적해 x를 찾는다
+	register int rtn = INT_MAX;
+	for (i = 0; i < size; i++) {
+		register int d = f_dist[i] + b_dist[i];
+		if ( d < rtn ) {
+			rtn = d;
+			x = i;
+		}
+	} 
+	if (PATH_TRUE) {
 		f_updater_of[source] = -1; //print source -> x
 		print_path(f_updater_of, x, size);
 
 		b_updater_of[target] = -1;//print x -> target
 		print_path_reverse(b_updater_of, x, size); 
-	} return f_dist[x] + b_dist[x];
+	} return rtn;
 }
 
 int dijkstra(int** cost, int size, int source, int target)
@@ -178,7 +184,6 @@ int main(int argc, char* argv[])
 	double time = omp_get_wtime(); 
 	int dist = dijkstra(cost, size, src, target);
 	time = omp_get_wtime() - time;
-
 	if(PATH_TRUE) {
 		printf("\n");
 		fprintf(F_OUT, "\n");

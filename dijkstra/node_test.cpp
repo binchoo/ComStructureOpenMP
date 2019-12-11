@@ -1,4 +1,3 @@
-#include <iostream>
 #include <queue>
 #include <omp.h>
 #include <stdio.h>
@@ -8,29 +7,20 @@
 
 /*Config Variables*/
 #define INT_MAX 10000000
-#define chunk_size 13
-int   n_thread;
-int   path_true;
-FILE  *fout;
-
+int DO_PARALLEL;
+int   N_THREAD;
+int   PATH_TRUE;
+FILE  *F_OUT;
 /*Print Utils*/
-void  print_param	(FILE* fp, char** argv);
-
-inline
-void _print_student_id	(FILE* fp);
-
-inline
-void  print_path	(FILE* fp, int* updater_of, int target, int size);
-
-inline
-void  print_path_reverse(FILE* fp, int* updater_of, int target, int size);
-
-inline
-void  print_dist_time	(FILE* fp, int dist, double time);
+void  print_param	(char** argv);
+void _print_student_id	();
+void  print_path	(int* updater_of, int target, int size); //src -> target
+void  print_path_reverse(int* updater_of, int target, int size); //target -> src
+void  print_dist_time	(int dist, double time);
 
 /*CSV Reader*/
-int  _extract_str_int	(char* str);
-int **csv_to_array	(char* file_name, int* get_size);
+int  _extract_str_int	(char* str); //str에서 숫자를 추출
+int **csv_to_array	(char* file_name, int* get_size); //csv에서 행렬을 불러옴
 
 /*Array Generation Utils*/
 int **random_2d_array	(int size);
@@ -40,7 +30,7 @@ using namespace std;
 /*Heap Node*/
 struct Node {
 	int id;
-	int dist;
+	int dist; //key
 	Node(int id, int dist) : id(id), dist(dist) { }
 };
 
@@ -51,20 +41,18 @@ struct cmp {
 	}
 };
 
-/*Dijkstra 알고리즘*/
-int dijkstra(int** cost, int size, int source, int target)
+int uni_dijkstra(int** cost, int size, int source, int target)
 {
-	int dist[size], updater_of[size]; //거리, 갱신자
-	int graphed[size] = { 0 }; //그래프 포함여부
-	register int i, start, d; //반복문 탐색자, 방금 그래프에 포함된 노드, 새로운 거리
+	int dist[size], updater_of[size], graphed[size] = {0}; //거리, 갱신자, 그래프 포함여부
+	register int i, start, d; //탐색자, 그래프에 편입된 노드, 새로운 거리
 
 	for(i = 0; i < size; i++) { 
 		dist[i] = INT_MAX;
-	} 
-	dist[source] = 0, updater_of[source] = -1; 
+	} dist[source] = 0, updater_of[source] = -1; 
 
-	priority_queue<Node, vector<Node>, cmp> dist_q; //dist min heap
+	priority_queue<Node, vector<Node>, cmp> dist_q; 
 	dist_q.push(Node(source, 0));
+
 	while (!graphed[target]) {
 		start = dist_q.top().id;
 		dist_q.pop();
@@ -79,12 +67,13 @@ int dijkstra(int** cost, int size, int source, int target)
 				}
 			}
 		}
-	} if (path_true) {
-		print_path(fout, updater_of, target, size);
+	}
+	if (PATH_TRUE) {
+		print_path(updater_of, target, size);
 	} return dist[target];
 }
 
-int compact_bi_dijkstra(int** cost, int size, int source, int target)
+int bidirect_dijkstra(int** cost, int size, int source, int target)
 {
 	int f_dist[size], f_updater_of[size], f_graphed[size] = {0}; //거리, 갱신자
 	int b_dist[size], b_updater_of[size], b_graphed[size] = {0}; //거리, 갱신자
@@ -99,11 +88,11 @@ int compact_bi_dijkstra(int** cost, int size, int source, int target)
 
 	priority_queue<Node, vector<Node>, cmp> f_dist_q; 
 	f_dist_q.push(Node(source, 0));
-	f_dist[source] = 0; 
+	f_dist[source]= 0; 
 
 	priority_queue<Node, vector<Node>, cmp> b_dist_q; 
 	b_dist_q.push(Node(target, 0));
-	b_dist[target] = 0; 
+	b_dist[target]= 0; 
 
 	while(1) {
 		#pragma omp parallel sections private(i, d)
@@ -118,7 +107,7 @@ int compact_bi_dijkstra(int** cost, int size, int source, int target)
 					d = f_dist[f_start] + cost[f_start][i];
 					if (d < f_dist[i]) {
 						f_dist_q.push(Node(i, d));
-						f_dist[i] = d;
+						f_dist[i]= d;
 						f_updater_of[i] = f_start;
 					}
 				}
@@ -132,123 +121,132 @@ int compact_bi_dijkstra(int** cost, int size, int source, int target)
 			b_dist_q.pop();
 			for (i = 0; i < size; i++) {
 				if (cost[b_start][i] && !b_graphed[i]) {
-					d = b_dist[b_start] + cost[b_start][i];
+					d = b_dist[b_start]+ cost[b_start][i];
 					if (d < b_dist[i]) {
 						b_dist_q.push(Node(i, d)); 
-						b_dist[i] = d;
+						b_dist[i]= d;
 						b_updater_of[i] = b_start;
 					}
 				}
 			}
 		}//end section
 		}//end sections
-
-		if (b_graphed[f_start]) {
-			x = f_start;
-			break;
-		} else if (f_graphed[b_start]) {
-			x =  b_start;
+		if (b_graphed[f_start] || f_graphed[b_start]) {
 			break;
 		}
-	} if (path_true) {
+	} 
+	//최적해 x를 찾는다
+	register int rtn = INT_MAX;
+	for (i = 0; i < size; i++) {
+		register int d = f_dist[i] + b_dist[i];
+		if ( d < rtn ) {
+			rtn = d;
+			x = i;
+		}
+	} 
+	if (PATH_TRUE) {
 		f_updater_of[source] = -1; //print source -> x
-		print_path(fout, f_updater_of, x, size);
+		print_path(f_updater_of, x, size);
 
 		b_updater_of[target] = -1;//print x -> target
-		print_path_reverse(fout, b_updater_of, x, size); 
-	} return f_dist[x] + b_dist[x];
+		print_path_reverse(b_updater_of, x, size); 
+	} return rtn;
+}
+
+int dijkstra(int** cost, int size, int source, int target)
+{
+	if(size > DO_PARALLEL)
+		return bidirect_dijkstra(cost, size, source, target);
+	else
+		return uni_dijkstra(cost, size, source, target);
 }
 
 /*main*/
 int main(int argc, char* argv[])
 {
 	/*Create File Output Stream*/
-	fout = fopen("201511298 dijkstra.txt", "a");
-	print_param(fout, argv);
+	F_OUT = fopen("201511298 dijkstra.txt", "a");
+	print_param(argv);
+
 	/*Get Parsed Parameters*/
 	char* file_name = argv[1];
-	n_thread = atoi(argv[2]);
-	path_true = atoi(argv[3]);
+	N_THREAD = atoi(argv[2]);
+	PATH_TRUE = atoi(argv[3]);
 	int src = atoi(argv[4]);
 	int target = atoi(argv[5]);
+	DO_PARALLEL = atoi(argv[6]);
 	/*Get Parsed Weight Array*/	
-	int size = 0; //그래프 노드의 수
+	int size = 0; 
 	int **cost = csv_to_array(file_name, &size); //가중치 행렬 얻기
-	omp_set_num_threads(n_thread); //스레드 수 설정
+	omp_set_num_threads(N_THREAD); //스레드 수 설정
+
 	/*Find Shortest Path*/	
-	double total_time = 0;
-	int count = 0;
-	for(int i = 7; i < 10; i++)
-		for(int j = 0; j < size; j++) {
-			double time = omp_get_wtime(); 
-			int dist = compact_bi_dijkstra(cost, size, i, j);
+	double time,total = 0;
+	int dist, count = 0;
+	for(int i = 3; i < 20; i++) 
+		for(int j = i; j < i + 1000; j++){
+			time = omp_get_wtime(); 
+			dist = dijkstra(cost, size, i, j);
 			time = omp_get_wtime() - time;
-			total_time += time;
+			total += time;
 			count++;
-			print_dist_time(fout, dist, time); //거리와 실행시간 출력
-			printf("avg time : %lf\n", total_time / count);
+			print_dist_time(dist, time); //거리와 실행시간 출력
+			printf("avg time : %lf\n", 1000*total/count);
+		}
+	if(PATH_TRUE) {
+		printf("\n");
+		fprintf(F_OUT, "\n");
 	}
 	/*Print Out Computation Time*/
+
 	/*Free Resources*/
-	free(cost);
-	fclose(fout);
+	fclose(F_OUT);
 	return 0;
 }
 
 /*Print Utils Impl.*/
-inline
-void print_param(FILE* fp, char** argv)
+void print_param(char** argv)
 {
 	printf("param: %s %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4], argv[5]);
-	fprintf(fp, "param: %s %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4], argv[5]);
+	fprintf(F_OUT, "param: %s %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4], argv[5]);
 }
 
-inline
-void _print_student_id(FILE* fp)
+void _print_student_id()
 {
 	printf("201511298 ");
-	fprintf(fp, "201511298 ");
+	fprintf(F_OUT, "201511298 ");
 }
 
-inline
-void print_path(FILE* fp, int* updater_of, int target, int size)
+void print_path(int* updater_of, int target, int size)
 {
-	int buffer[size];
-	register int buf_len = 0;
+	int path[size];
+	register int len = 0;
 
 	do {
-		buffer[buf_len++] = target;
+		path[len++] = target;
 	} while ((target = updater_of[target]) != -1);
 
-	_print_student_id(fp);
+	_print_student_id();
 
-	for(register int i = buf_len - 1; i >= 0; i--) {
-		printf("n%04d ", buffer[i]);
-		fprintf(fp, "n%04d ", buffer[i]);
+	for(register int i = len - 1; i >= 0; i--) {
+		printf("n%04d ", path[i]);
+		fprintf(F_OUT, "n%04d ", path[i]);
 	} 
-	printf("\n");
-	fprintf(fp, "\n");
 }
 
-inline
-void print_path_reverse(FILE* fp, int* updater_of, int target, int size)
+void print_path_reverse(int* updater_of, int target, int size)
 {
-	register int buf_len = 0;
-
 	while ((target = updater_of[target]) != -1) {
 		printf("n%04d ", target);
-		fprintf(fp, "n%04d ", target);
+		fprintf(F_OUT, "n%04d ", target);
 	}
-	printf("\n");
-	fprintf(fp, "\n");
 }
 
-inline
-void print_dist_time(FILE* fp, int dist, double wtime)
+void print_dist_time(int dist, double wtime)
 {
-	_print_student_id(fp);
-	printf("Shortest Path: %d Compute time: %.5lf msec\n", dist, wtime * 1000);
-	fprintf(fp, "Shortest Path: %d Compute time: %.5lf msec\n", dist, wtime * 1000);
+	_print_student_id();
+	printf("Shortest Path: %d Compute time: %.5lf ms\n\n", dist, wtime * 1000);
+	fprintf(F_OUT, "Shortest Path: %d Compute time: %.5lf ms\n\n", dist, wtime * 1000);
 }
 
 /*CSV Reader Impl.*/
@@ -336,4 +334,3 @@ int **symmetric_2d_array(int** arr, int size)
 		}
 	} return arr;
 }
-
