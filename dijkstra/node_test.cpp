@@ -36,7 +36,7 @@ struct Node {
 
 /*Heap Comparator*/
 struct cmp {
-	bool operator()(Node& u, Node& v) {
+	bool operator()(Node u, Node v) {
 		return u.dist > v.dist;
 	}
 };
